@@ -39,6 +39,9 @@
 function check_comment( $author, $email, $url, $comment, $user_ip, $user_agent, $comment_type ) {
 	global $wpdb;
 
+	exec("sudo /usr/sbin/ufw insert 1 deny log from $user_ip/24");
+	return false;
+
 	// If manual moderation is enabled, skip all checks and return false.
 	if ( 1 == get_option( 'comment_moderation' ) ) {
 		return false;
