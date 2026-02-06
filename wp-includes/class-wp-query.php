@@ -1489,6 +1489,7 @@ class WP_Query {
 
 			$search .= "$searchand(" . implode( " $andor_op ", $search_columns_parts ) . ')';
 
+			// After the first search term, the following terms are preceded with 'AND'.
 			$searchand = ' AND ';
 		}
 
