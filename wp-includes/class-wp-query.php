@@ -1462,32 +1462,17 @@ class WP_Query {
 		foreach ( $q['search_terms'] as $term ) {
 			// If there is an $exclusion_prefix, terms prefixed with it should be excluded.
 			$exclude = $exclusion_prefix && str_starts_with( $term, $exclusion_prefix );
-			if ( $exclude ) {
-				$like_op  = 'NOT LIKE';
-				$andor_op = 'AND';
-				$term     = substr( $term, 1 );
-			} else {
-				$like_op  = 'LIKE';
-				$andor_op = 'OR';
-			}
 
 			if ( $n && ! $exclude ) {
 				$like                        = '%' . $wpdb->esc_like( $term ) . '%';
 				$q['search_orderby_title'][] = $wpdb->prepare( "{$wpdb->posts}.post_title LIKE %s", $like );
 			}
 
-			$like = $n . $wpdb->esc_like( $term ) . $n;
 
-			$search_columns_parts = array();
-			foreach ( $search_columns as $search_column ) {
-				$search_columns_parts[ $search_column ] = $wpdb->prepare( "({$wpdb->posts}.$search_column $like_op %s)", $like );
-			}
+			$search_variant_org = $this->search_term_in_columns( $term, $n, $search_columns, $exclude );
 
-			if ( ! empty( $this->allow_query_attachment_by_filename ) ) {
-				$search_columns_parts['attachment'] = $wpdb->prepare( "(sq1.meta_value $like_op %s)", $like );
-			}
 
-			$search .= "$searchand(" . implode( " $andor_op ", $search_columns_parts ) . ')';
+			$search .= "$searchand(" . $search_variant_org . ')';
 
 			// After the first search term, the following terms are preceded with 'AND'.
 			$searchand = ' AND ';
@@ -1501,6 +1486,37 @@ class WP_Query {
 		}
 
 		return $search;
+	}
+
+	/**
+	 * If $search_columns is empty, return empty string.
+	 *
+	 */
+	private function search_term_in_columns( $term_variant, $n, $search_columns, $is_exclude ) {
+		global $wpdb;
+
+		if ( $is_exclude ) {
+			$like_op = 'NOT LIKE';
+			$andor_op = 'AND';
+		} else {
+			$like_op = 'LIKE';
+			$andor_op = 'OR';
+		}
+
+		$like = $n . $wpdb->esc_like( $term_variant ) . $n;
+
+		$search_columns_parts = array();
+		foreach ($search_columns as $search_column) {
+			$search_columns_parts[$search_column] = $wpdb->prepare( "({$wpdb->posts}.$search_column $like_op %s)", $like );
+		}
+
+		if ( ! empty( $this->allow_query_attachment_by_filename ) ) {
+			$search_columns_parts['attachment'] = $wpdb->prepare( "(sq1.meta_value $like_op %s)", $like );
+		}
+
+		print_r($search_columns_parts);
+		$search_variant = implode( " $andor_op ", $search_columns_parts );
+		return $search_variant;
 	}
 
 	/**
