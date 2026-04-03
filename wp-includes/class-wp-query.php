@@ -1462,6 +1462,8 @@ class WP_Query {
 		foreach ( $q['search_terms'] as $term ) {
 			// If there is an $exclusion_prefix, terms prefixed with it should be excluded.
 			$exclude = $exclusion_prefix && str_starts_with( $term, $exclusion_prefix );
+			if ( $exclude ) 
+				$term = substr( $term, 1 );
 
 			if ( $n && ! $exclude ) {
 				$like                        = '%' . $wpdb->esc_like( $term ) . '%';
@@ -1469,10 +1471,54 @@ class WP_Query {
 			}
 
 
+			$search_variant_tw = '';
+			$search_variant_cn = '';
+			// CJK Unified Ideographs (Unicode block), range 4E00–9FFF
+			// without considering extensions A to J, and others.
+			// In PHP, 0 is falsy.
+			if ( preg_match('/^[\x{4e00}-\x{9fff}]+$/', $term) == 0 && function_exists( 'opencc_open' ) ) {
+				//echo 'opencc is available';
+				// Simplified Chinese to Traditional Chinese (Taiwan standard, with phrases)
+				assert( isset( $config ) == false );
+				assert( isset( $text ) == false );
+
+				$config = opencc_open( 's2twp.json' );
+				$text = opencc_convert( $term, $config );
+				if ( $term != $text )
+					$search_variant_tw = $this->search_term_in_columns( $text, $n, $search_columns, $exclude );
+
+				$config = opencc_open( 'tw2sp.json' );
+				$text = opencc_convert( $term, $config );
+				if ( $term != $text )
+					$search_variant_cn = $this->search_term_in_columns( $text, $n, $search_columns, $exclude );
+
+				unset( $config );
+				unset( $text );
+			}
+
 			$search_variant_org = $this->search_term_in_columns( $term, $n, $search_columns, $exclude );
+			$search_or = '';
+			if ( ! empty ( $search_variant_tw ) )
+				$search_or .= '(' . $search_variant_tw . ')';
+			//echo "\nsearch_or1: ", $search_or;
+			if ( ! empty ( $search_variant_cn ) ) {
+				if ( empty ( $search_or ))
+					$search_or = '(' . $search_variant_cn . ')';
+				else
+					$search_or .= ' OR (' . $search_variant_cn . ')';
+			}
+			//echo "\nsearch_or2: ", $search_or;
+			if ( ! empty( $search_variant_org ) ) {
+				if ( empty( $search_or ) )
+					$search_or = '(' . $search_variant_org . ')';
+				else
+					$search_or .= ' OR (' . $search_variant_org . ')';
+			}
+			//echo "\nsearch_or3: ", $search_or;
 
 
-			$search .= "$searchand(" . $search_variant_org . ')';
+			$search .= "$searchand(" . $search_or . ')';
+			//echo "\nsearch expression is ", $search;
 
 			// After the first search term, the following terms are preceded with 'AND'.
 			$searchand = ' AND ';
@@ -1514,7 +1560,6 @@ class WP_Query {
 			$search_columns_parts['attachment'] = $wpdb->prepare( "(sq1.meta_value $like_op %s)", $like );
 		}
 
-		print_r($search_columns_parts);
 		$search_variant = implode( " $andor_op ", $search_columns_parts );
 		return $search_variant;
 	}
